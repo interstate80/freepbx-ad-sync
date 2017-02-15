@@ -1,0 +1,139 @@
+#! /usr/bin/python
+# -*- coding: utf-8 -*-
+
+import ldap
+import MySQLdb
+from passgen import gen_newpass
+
+AD_URL = "ldap://havasdigital.ru"
+AD_USER = "asterisk@havasdigital.ru"
+AD_PASSWORD = "1q2w3e4r"
+
+BASE_DN = "OU=Havas,DC=havasdigital,DC=RU"
+scope = ldap.SCOPE_SUBTREE
+filterexp = "(|(telephoneNumber=3*))"
+attrlist = ["displayName","sAMAccountName", "mail", "telephoneNumber", "ipPhone"]
+
+DB_HOST = "adr-pbx01.havasdigital.ru"
+DB_USER = "root"
+DB_PASS = ""
+DB_NAME = "asterisk"
+
+ASTERISK_HOST = "adr-pbx01.havasdigital.ru"
+
+def check_ext(extnum):
+    print("Подключаемся к серверу БД: %s" % DB_HOST)
+    try:
+	DB = MySQLdb.connect(DB_HOST, DB_USER, DB_PASS, DB_NAME, charset='utf8')
+    except Exception as e:
+        print("Ошибочка: %s" % e)
+    ch_cursor = DB.cursor()
+    sql_ch = "select extension from users where extension='" + extnum + "';"
+    ch_cursor.execute(sql_ch)
+    ch_data = ch_cursor.fetchall()
+    for ch_rec in ch_data:
+        if not ch_rec:
+            return False
+        else:
+            return True
+    ch_cursor.close()
+    DB.close()
+
+def add_ext(cextnum, cextname, flag, upass=''):
+    # print("Подключаемся к БД %s" % DB_HOST)
+    sql_sip_add = ""
+    try:
+	DB = MySQLdb.connect(DB_HOST, DB_USER, DB_PASS, DB_NAME, charset='utf8')
+    except Exception as e:
+        print("Ошибочка: %s" % e)
+    add_cursor = DB.cursor()
+    if flag == 3:
+        sql_sip_add += """insert into sip(id, keyword, data, flags) values ('%(cextnum)s', 'secret', '%(upass)s', 2),"""%{"cextnum":cextnum, "upass":upass}
+        sql_sip_add += """('%(cextnum)s', 'dtmfmode', 'rfc2833', 3),"""%{"cextnum":cextnum}
+        sql_sip_add += """('%(cextnum)s', 'canreinvite', 'no', 4),"""%{"cextnum":cextnum}
+        sql_sip_add += """('%(cextnum)s', 'context', 'from-internal', 5),"""%{"cextnum":cextnum}
+        sql_sip_add += """('%(cextnum)s', 'host', 'dynamic', 6),"""%{"cextnum":cextnum}
+        sql_sip_add += """('%(cextnum)s', 'defaultuser', '', 7),"""%{"cextnum":cextnum}
+        sql_sip_add += """('%(cextnum)s', 'trustrpid', 'yes', 8),"""%{"cextnum":cextnum}
+        sql_sip_add += """('%(cextnum)s', 'sendrpid', 'pai', 9),"""%{"cextnum":cextnum}
+        sql_sip_add += """('%(cextnum)s', 'type', 'friend', 10),"""%{"cextnum":cextnum}
+        sql_sip_add += """('%(cextnum)s', 'sessiontimers', 'accept', 11),"""%{"cextnum":cextnum}
+        sql_sip_add += """('%(cextnum)s', 'nat', 'no', 12),"""%{"cextnum":cextnum}
+        sql_sip_add += """('%(cextnum)s', 'port', '5060', 13),"""%{"cextnum":cextnum}
+        sql_sip_add += """('%(cextnum)s', 'qualify', 'yes', 14),"""%{"cextnum":cextnum}
+        sql_sip_add += """('%(cextnum)s', 'qualifyfreq', '60', 15),"""%{"cextnum":cextnum}
+        sql_sip_add += """('%(cextnum)s', 'transport', 'udp,tcp,tls', 16),"""%{"cextnum":cextnum}
+        sql_sip_add += """('%(cextnum)s', 'avpf', 'no', 17),"""%{"cextnum":cextnum}
+        sql_sip_add += """('%(cextnum)s', 'force_avp', 'no', 18),"""%{"cextnum":cextnum}
+        sql_sip_add += """('%(cextnum)s', 'icesupport', 'no', 19),"""%{"cextnum":cextnum}
+        sql_sip_add += """('%(cextnum)s', 'encryption', 'no', 20),"""%{"cextnum":cextnum}
+        sql_sip_add += """('%(cextnum)s', 'videosupport', 'inherit', 21),"""%{"cextnum":cextnum}
+        sql_sip_add += """('%(cextnum)s', 'namedcallgroup', '', 22),"""%{"cextnum":cextnum}
+        sql_sip_add += """('%(cextnum)s', 'namedpickupgroup', '', 23),"""%{"cextnum":cextnum}
+        sql_sip_add += """('%(cextnum)s', 'disallow', '', 24),"""%{"cextnum":cextnum}
+        sql_sip_add += """('%(cextnum)s', 'allow', '', 25),"""%{"cextnum":cextnum}
+        sql_sip_add += """('%(cextnum)s', 'dial', 'SIP/%(cextnum)s', 26),"""%{"cextnum":cextnum}
+        sql_sip_add += """('%(cextnum)s', 'accountcode', '', 27),"""%{"cextnum":cextnum}
+        sql_sip_add += """('%(cextnum)s', 'deny', '0.0.0.0/0.0.0.0', 28),"""%{"cextnum":cextnum}
+        sql_sip_add += """('%(cextnum)s', 'permit', '0.0.0.0/0.0.0.0', 29),"""%{"cextnum":cextnum}
+        sql_sip_add += """('%(cextnum)s', 'secret_origional', '', 30),"""%{"cextnum":cextnum}
+        sql_sip_add += """('%(cextnum)s', 'sipdriver', 'chan_sip', 31),"""%{"cextnum":cextnum}
+        sql_sip_add += """('%(cextnum)s', 'account', '%(cextnum)s', 32),"""%{"cextnum":cextnum, "cextnum":cextnum}
+        sql_sip_add += """('%(cextnum)s', 'callerid', 'device <%(cextnum)s>', 33);\n"""%{"cextnum":cextnum, "cextnum":cextnum}
+    elif flag == 1:    
+        sql_sip_add += """insert into users(extension, name, voicemail, ringtimer, password, noanswer, recording, outboundcid, sipname) values ('%(cextnum)s', '%(cextname)s', 'novm', 0, '', '', '', '', '');"""%{"cextnum":cextnum, "cextname":cextname}
+    elif flag == 2:
+        sql_sip_add += """insert into devices(id, tech, dial, devicetype, user, description, emergency_cid) values ('%(cextnum)s', 'sip', 'SIP/%(cextnum)s', 'fixed', '%(cextnum)s', '%(cextname)s', '');"""%{"cextnum":cextnum, "cextnum":cextnum, "cextnum":cextnum, "cextname":cextname}
+    try:
+        add_cursor.execute(sql_sip_add)
+        DB.commit()
+        add_cursor.close()
+    except Exception as e:
+        print("Шаг: %s.\nОшибка добавления в базу: %s" % (flag, e))
+    DB.close()
+
+def write_cfg(imac, cfgstr):
+    path = '/var/lib/tftpboot/'+imac+'.cfg'
+    f = open(path, 'w')
+    f.write(cfgstr)
+    f.close
+    
+
+try:
+    print("Подключаемся к LDAP: %s" % AD_URL)
+    AD = ldap.initialize(AD_URL)
+    AD.simple_bind_s(AD_USER, AD_PASSWORD)  
+    results = AD.search_s(BASE_DN, scope, filterexp, attrlist)
+    for result in results:
+        tel = result[1]['ipPhone'][0]
+        disname = result[1]['displayName'][0]
+        print("%s -> %s" % (disname, tel))
+        if not 'pager' in result[1].keys():
+            print("Поле ipPhone пустое")
+            mac_addr = ''
+            continue
+        elif result[1]['ipPhone'][0]:
+            print("В поле 'ipPhone' есть запись.")
+            continue
+        else:
+            userpass = gen_newpass(11)
+            mac_addr = result[1]['ipPhone'][0]
+            PRE_CFG = """#!version:1.0.0.1\naccount.1.auth_name = %s\naccount.1.display_name = %s\naccount.1.label = %s\naccount.1.password = %s\naccount.1.user_name = %s\naccount.1.outbound_host =\naccount.1.outbound_port =\naccount.1.outbound_proxy_enable = 0\naccount.1.shared_line = 0\naccount.1.sip_server.1.address = %s\naccount.1.sip_server.1.port = 5060"""%(tel, disname, tel, userpass, tel, ASTERISK_HOST)
+            write_cfg(mac_addr, PRE_CFG)
+        if check_ext(tel):
+            continue
+        else:
+            print("Нет экстеншена...")
+            print("%s-> %s" % (disname, tel))
+            answ = raw_input('Добавить? [Y/N]')
+            if str(answ) != 'n':
+                print("Добавляем...")
+                add_ext(tel, disname, 1)
+                add_ext(tel, disname, 2)
+                add_ext(tel, disname, 3, userpass)
+            else:
+                print("Не добавляем.")
+                pass
+    AD.unbind_s()
+except Exception as e:
+    print("Ошибка: %s" % e)
