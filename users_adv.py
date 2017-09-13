@@ -190,6 +190,21 @@ try:
             PRE_CFG = """#!version:1.0.0.1\naccount.1.enable = 1\naccount.1.auth_name = %s\naccount.1.display_name = %s\naccount.1.label = %s\naccount.1.password = %s\naccount.1.user_name = %s\naccount.1.outbound_proxy_enable = 0\naccount.1.shared_line = 0\naccount.1.sip_server.1.address = %s\naccount.1.sip_server.1.port = 5060\nsecurity.user_password = admin:Nz$gMgeGWHn"""%(tel, disname, tel, newpass, tel, ASTERISK_HOST)
             write_cfg(mac_addr, PRE_CFG)
             os.system('/usr/sbin/rasterisk -x "database put CW %s ENABLED"' % tel) # добавляем запись CallWaiting в БД астериска
+			os.system('/usr/sbin/rasterisk -x "database put AMPUSER/%s answermode disabled"' % tel)
+			os.system('/usr/sbin/rasterisk -x "database put AMPUSER/%s cfringtimer 0"' % tel)
+			os.system('/usr/sbin/rasterisk -x "database put AMPUSER/%s cidname %s"' % (tel, disname))
+			os.system('/usr/sbin/rasterisk -x "database put AMPUSER/%s cidnum %s"' % (tel, tel))
+			os.system('/usr/sbin/rasterisk -x "database put AMPUSER/%s concurrency_limit 0"' % tel)
+			os.system('/usr/sbin/rasterisk -x "database put AMPUSER/%s device %s"' % (tel, tel))
+			os.system('/usr/sbin/rasterisk -x "database put AMPUSER/%s hint SIP/%s,CustomPresence:%s"' % (tel, tel, tel))
+			os.system('/usr/sbin/rasterisk -x "database put AMPUSER/%s intercom enabled"' % tel)
+			os.system('/usr/sbin/rasterisk -x "database put AMPUSER/%s ringtimer 0"' % tel)
+			os.system('/usr/sbin/rasterisk -x "database put AMPUSER/%s voicemail novm"' % tel)
+			os.system('/usr/sbin/rasterisk -x "database put DEVICE/%s default_user %s"' % (tel, tel))
+			os.system('/usr/sbin/rasterisk -x "database put DEVICE/%s dial SIP/%s"' % (tel, tel))
+			os.system('/usr/sbin/rasterisk -x "database put DEVICE/%s type fixed"' % tel)
+			os.system('/usr/sbin/rasterisk -x "database put DEVICE/%s user %s"' % (tel, tel))
+			
         else:
             mac_addr = result[1]['pager'][0].lower()
             print("Нет экстеншена: %s -> %s. Добавляем..." % (disname, tel))
