@@ -16,7 +16,7 @@ try:
     BASE_DN = ConfigSectionMap('ldap')['basedn']
     filterexp = ConfigSectionMap('misc')['extfilt']
     adattr = ConfigSectionMap('misc')['adattr']
-    
+
     # MySQL section
     DB_HOST = ConfigSectionMap('mysql')['dbhost']
     ASTERISK_HOST = ConfigSectionMap('mysql')['dbhost']
@@ -26,7 +26,7 @@ try:
 except Exception as err:
     print("Ошибка конфигурации: %s." % err)
 
-scope = ldap.SCOPE_SUBTREE
+scope = 2 #ldap.SCOPE_SUBTREE
 attrlist = ["displayName","sAMAccountName", "mail", "pager", adattr, "userAccountControl"]
 
 # Проверка экстеншена на наличие
@@ -72,7 +72,7 @@ def del_ext(extnum):
     DB.commit()
     DB.close()
     os.system('/usr/sbin/rasterisk -x "database del CW %s"' % extnum) # удаляем запись из БД астериска
-    
+
 # Создание нового экстеншена
 def add_ext(cextnum, cextname, flag, upass=''):
     sql_sip_add = ""
@@ -89,7 +89,7 @@ def add_ext(cextnum, cextname, flag, upass=''):
         sql_sip_add += """('%(cextnum)s', 'host', 'dynamic', 6),"""%{"cextnum":cextnum}
         sql_sip_add += """('%(cextnum)s', 'defaultuser', '', 7),"""%{"cextnum":cextnum}
         sql_sip_add += """('%(cextnum)s', 'trustrpid', 'yes', 8),"""%{"cextnum":cextnum}
-        sql_sip_add += """('%(cextnum)s', 'sendrpid', 'pai', 9),"""%{"cextnum":cextnum}
+        sql_sip_add += """('%(cextnum)s', 'sendrpid', 'yes', 9),"""%{"cextnum":cextnum}
         sql_sip_add += """('%(cextnum)s', 'type', 'friend', 10),"""%{"cextnum":cextnum}
         sql_sip_add += """('%(cextnum)s', 'sessiontimers', 'accept', 11),"""%{"cextnum":cextnum}
         sql_sip_add += """('%(cextnum)s', 'nat', 'no', 12),"""%{"cextnum":cextnum}
@@ -114,7 +114,7 @@ def add_ext(cextnum, cextname, flag, upass=''):
         sql_sip_add += """('%(cextnum)s', 'sipdriver', 'chan_sip', 31),"""%{"cextnum":cextnum}
         sql_sip_add += """('%(cextnum)s', 'account', '%(cextnum)s', 32),"""%{"cextnum":cextnum, "cextnum":cextnum}
         sql_sip_add += """('%(cextnum)s', 'callerid', 'device <%(cextnum)s>', 33);\n"""%{"cextnum":cextnum, "cextnum":cextnum}
-    elif flag == 1:    
+    elif flag == 1:
         sql_sip_add += """insert into users(extension, name, voicemail, ringtimer, password, noanswer, recording, outboundcid, sipname) values ('%(cextnum)s', '%(cextname)s', 'novm', 0, '', '', '', '', '');"""%{"cextnum":cextnum, "cextname":cextname}
     elif flag == 2:
         sql_sip_add += """insert into devices(id, tech, dial, devicetype, user, description, emergency_cid) values ('%(cextnum)s', 'sip', 'SIP/%(cextnum)s', 'fixed', '%(cextnum)s', '%(cextname)s', '');"""%{"cextnum":cextnum, "cextnum":cextnum, "cextnum":cextnum, "cextname":cextname}
@@ -137,7 +137,7 @@ def find_cfg(ttel):
         return b.group(0).replace('.cfg', '')
     else:
         return False
-    
+
 # Запись файла конфига для телефона
 def write_cfg(imac, cfgstr):
     path = '/var/lib/tftpboot/'+imac+'.cfg'
@@ -148,12 +148,12 @@ def write_cfg(imac, cfgstr):
 
 try:
     AD = ldap.initialize(AD_URL)
-    AD.simple_bind_s(AD_USER, AD_PASSWORD)  
+    AD.simple_bind_s(AD_USER, AD_PASSWORD)
     results = AD.search_s(BASE_DN, scope, filterexp, attrlist)
     for result in results:
         if 'userAccountControl' in result[1].keys():
             UAC = result[1]['userAccountControl'][0]
-        tel = result[1]['telephoneNumber'][0]
+        tel = result[1]['ipPhone'][0]
         disname = result[1]['displayName'][0]
         if UAC == '66050':
             continue
@@ -178,7 +178,7 @@ try:
             print("МАС-адрес не задан")
             continue
         elif len(result[1]['pager'][0]) != 12:
-            print("Ошибка в MAC-адресе.")
+            print("Ошибка в MAC-адресе: %s." % result[1]['pager'][0])
             continue
         elif modext > 0:
             newpass = gen_newpass(11)
@@ -189,22 +189,23 @@ try:
             add_ext(tel, disname, 3, newpass)
             PRE_CFG = """#!version:1.0.0.1\naccount.1.enable = 1\naccount.1.auth_name = %s\naccount.1.display_name = %s\naccount.1.label = %s\naccount.1.password = %s\naccount.1.user_name = %s\naccount.1.outbound_proxy_enable = 0\naccount.1.shared_line = 0\naccount.1.sip_server.1.address = %s\naccount.1.sip_server.1.port = 5060\nsecurity.user_password = admin:Nz$gMgeGWHn"""%(tel, disname, tel, newpass, tel, ASTERISK_HOST)
             write_cfg(mac_addr, PRE_CFG)
-            os.system('/usr/sbin/rasterisk -x "database put CW %s ENABLED"' % tel) # добавляем запись CallWaiting в БД астериска
-			os.system('/usr/sbin/rasterisk -x "database put AMPUSER/%s answermode disabled"' % tel)
-			os.system('/usr/sbin/rasterisk -x "database put AMPUSER/%s cfringtimer 0"' % tel)
-			os.system('/usr/sbin/rasterisk -x "database put AMPUSER/%s cidname %s"' % (tel, disname))
-			os.system('/usr/sbin/rasterisk -x "database put AMPUSER/%s cidnum %s"' % (tel, tel))
-			os.system('/usr/sbin/rasterisk -x "database put AMPUSER/%s concurrency_limit 0"' % tel)
-			os.system('/usr/sbin/rasterisk -x "database put AMPUSER/%s device %s"' % (tel, tel))
-			os.system('/usr/sbin/rasterisk -x "database put AMPUSER/%s hint SIP/%s,CustomPresence:%s"' % (tel, tel, tel))
-			os.system('/usr/sbin/rasterisk -x "database put AMPUSER/%s intercom enabled"' % tel)
-			os.system('/usr/sbin/rasterisk -x "database put AMPUSER/%s ringtimer 0"' % tel)
-			os.system('/usr/sbin/rasterisk -x "database put AMPUSER/%s voicemail novm"' % tel)
-			os.system('/usr/sbin/rasterisk -x "database put DEVICE/%s default_user %s"' % (tel, tel))
-			os.system('/usr/sbin/rasterisk -x "database put DEVICE/%s dial SIP/%s"' % (tel, tel))
-			os.system('/usr/sbin/rasterisk -x "database put DEVICE/%s type fixed"' % tel)
-			os.system('/usr/sbin/rasterisk -x "database put DEVICE/%s user %s"' % (tel, tel))
-			
+            print("modext > 0")
+            print("Добавляем запись в БД астериска: %s" % disname)
+            os.system('/usr/sbin/rasterisk -x "database put CW %s ENABLED" > /dev/null 2>&1' % tel)
+            os.system('/usr/sbin/rasterisk -x "database put AMPUSER/%s answermode disabled" > /dev/null 2>&1' % tel)
+            os.system('/usr/sbin/rasterisk -x "database put AMPUSER/%s cfringtimer 0" > /dev/null 2>&1' % tel)
+            os.system("/usr/sbin/rasterisk -x 'database put AMPUSER/%s cidname \"%s\"' > /dev/null 2>&1" % (tel, disname))
+            os.system('/usr/sbin/rasterisk -x "database put AMPUSER/%s cidnum %s"' % (tel, tel))
+            os.system('/usr/sbin/rasterisk -x "database put AMPUSER/%s concurrency_limit 0"' % tel)
+            os.system('/usr/sbin/rasterisk -x "database put AMPUSER/%s device %s"' % (tel, tel))
+            os.system('/usr/sbin/rasterisk -x "database put AMPUSER/%s hint SIP/%s,CustomPresence:%s"' % (tel, tel, tel))
+            os.system('/usr/sbin/rasterisk -x "database put AMPUSER/%s intercom enabled"' % tel)
+            os.system('/usr/sbin/rasterisk -x "database put AMPUSER/%s ringtimer 0"' % tel)
+            os.system('/usr/sbin/rasterisk -x "database put AMPUSER/%s voicemail novm"' % tel)
+            os.system('/usr/sbin/rasterisk -x "database put DEVICE/%s default_user %s"' % (tel, tel))
+            os.system('/usr/sbin/rasterisk -x "database put DEVICE/%s dial SIP/%s"' % (tel, tel))
+            os.system('/usr/sbin/rasterisk -x "database put DEVICE/%s type fixed"' % tel)
+            os.system('/usr/sbin/rasterisk -x "database put DEVICE/%s user %s"' % (tel, tel))
         else:
             mac_addr = result[1]['pager'][0].lower()
             print("Нет экстеншена: %s -> %s. Добавляем..." % (disname, tel))
@@ -215,7 +216,22 @@ try:
             # Генерируем конфиг для телефона
             PRE_CFG = """#!version:1.0.0.1\naccount.1.enable = 1\naccount.1.auth_name = %s\naccount.1.display_name = %s\naccount.1.label = %s\naccount.1.password = %s\naccount.1.user_name = %s\naccount.1.outbound_proxy_enable = 0\naccount.1.shared_line = 0\naccount.1.sip_server.1.address = %s\naccount.1.sip_server.1.port = 5060\nsecurity.user_password = admin:Nz$gMgeGWHn"""%(tel, disname, tel, userpass, tel, ASTERISK_HOST)
             write_cfg(mac_addr, PRE_CFG)
-            os.system('/usr/sbin/rasterisk -x "database put CW %s ENABLED"' % tel) # добавляем запись CallWaiting в БД астериска
+            print("добавляем запись в БД астериска %s" % disname)
+            os.system('/usr/sbin/rasterisk -x "database put CW %s ENABLED" > /dev/null 2>&1' % tel)
+            os.system('/usr/sbin/rasterisk -x "database put AMPUSER/%s answermode disabled" > /dev/null 2>&1' % tel)
+            os.system('/usr/sbin/rasterisk -x "database put AMPUSER/%s cfringtimer 0" > /dev/null 2>&1' % tel)
+            os.system("/usr/sbin/asterisk -x 'database put AMPUSER/%s cidname \"%s\"' > /dev/null 2>&1" % (tel, disname))
+            os.system('/usr/sbin/rasterisk -x "database put AMPUSER/%s cidnum %s" > /dev/null 2>&1' % (tel, tel))
+            os.system('/usr/sbin/rasterisk -x "database put AMPUSER/%s concurrency_limit 0" > /dev/null 2>&1' % tel)
+            os.system('/usr/sbin/rasterisk -x "database put AMPUSER/%s device %s" > /dev/null 2>&1' % (tel, tel))
+            os.system('/usr/sbin/rasterisk -x "database put AMPUSER/%s hint SIP/%s,CustomPresence:%s" > /dev/null 2>&1' % (tel, tel, tel))
+            os.system('/usr/sbin/rasterisk -x "database put AMPUSER/%s intercom enabled" > /dev/null 2>&1' % tel)
+            os.system('/usr/sbin/rasterisk -x "database put AMPUSER/%s ringtimer 0" > /dev/null 2>&1' % tel)
+            os.system('/usr/sbin/rasterisk -x "database put AMPUSER/%s voicemail novm" > /dev/null 2>&1' % tel)
+            os.system('/usr/sbin/rasterisk -x "database put DEVICE/%s default_user %s" > /dev/null 2>&1' % (tel, tel))
+            os.system('/usr/sbin/rasterisk -x "database put DEVICE/%s dial SIP/%s" > /dev/null 2>&1' % (tel, tel))
+            os.system('/usr/sbin/rasterisk -x "database put DEVICE/%s type fixed" > /dev/null 2>&1' % tel)
+            os.system('/usr/sbin/rasterisk -x "database put DEVICE/%s user %s" > /dev/null 2>&1' % (tel, tel))
     AD.unbind_s()
 except Exception as e:
     print("Ошибка глобальная: %s" % e)
