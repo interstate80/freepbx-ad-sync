@@ -175,7 +175,7 @@ try:
             continue
         elif not 'pager' in result[1].keys():
             mac_addr = ''
-            print("МАС-адрес не задан")
+            print("МАС-адрес не задан %s" % disname)
             continue
         elif len(result[1]['pager'][0]) != 12:
             print("Ошибка в MAC-адресе: %s." % result[1]['pager'][0])
