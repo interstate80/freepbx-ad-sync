@@ -153,7 +153,7 @@ try:
     for result in results:
         if 'userAccountControl' in result[1].keys():
             UAC = result[1]['userAccountControl'][0]
-        tel = result[1]['ipPhone'][0]
+        tel = result[1][adattr][0]
         disname = result[1]['displayName'][0]
         if UAC == '66050':
             continue
